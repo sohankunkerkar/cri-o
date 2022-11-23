@@ -102,7 +102,8 @@ func (ss *StatsServer) updateSandbox(sb *sandbox.Sandbox) *types.PodSandboxStats
 	}
 	containerStats := make([]*types.ContainerStats, 0, len(sb.Containers().List()))
 	for _, c := range sb.Containers().List() {
-		if c.StateNoLock().Status == oci.ContainerStateStopped {
+		cStat := ss.updateContainer(c, sb)
+		if cStat == nil {
 			continue
 		}
 		cCgroupStats, err := ss.Runtime().ContainerStats(context.TODO(), c, sb.CgroupParent())
@@ -115,6 +116,7 @@ func (ss *StatsServer) updateSandbox(sb *sandbox.Sandbox) *types.PodSandboxStats
 		if oldcStats, ok := ss.ctrStats[c.ID()]; ok {
 			updateUsageNanoCores(oldcStats.Cpu, cStats.Cpu)
 		}
+		containerStats = append(containerStats, cStat)
 	}
 	sandboxStats.Linux.Containers = containerStats
 	if old, ok := ss.sboxStats[sb.ID()]; ok {
