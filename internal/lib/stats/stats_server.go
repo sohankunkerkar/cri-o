@@ -96,6 +96,7 @@ func (ss *StatsServer) updateSandbox(sb *sandbox.Sandbox) *types.PodSandboxStats
 	if err != nil {
 		logrus.Errorf("Error getting sandbox stats %s: %v", sb.ID(), err)
 	}
+
 	sandboxStats := cgmgrStatsToCRISandbox(sbCgroupStats, sb)
 	if err := ss.populateNetworkUsage(sandboxStats, sb); err != nil {
 		logrus.Errorf("Error adding network stats for sandbox %s: %v", sb.ID(), err)
