@@ -822,7 +822,7 @@ func (r *runtimeVM) UnpauseContainer(ctx context.Context, c *Container) error {
 }
 
 // ContainerStats provides statistics of a container.
-func (r *runtimeVM) ContainerStats(ctx context.Context, c *Container, _ string) (*types.ContainerStats, error) {
+func (r *runtimeVM) ContainerStats(ctx context.Context, c *Container, _ string) (*cgmgr.CgroupStats, error) {
 	log.Debugf(ctx, "RuntimeVM.ContainerStats() start")
 	defer log.Debugf(ctx, "RuntimeVM.ContainerStats() end")
 
@@ -853,51 +853,54 @@ func (r *runtimeVM) ContainerStats(ctx context.Context, c *Container, _ string) 
 	return metricsToCtrStats(ctx, c, m), nil
 }
 
-func metricsToCtrStats(ctx context.Context, c *Container, m *cgroups.Metrics) *types.ContainerStats {
-	var (
-		cpuNano         uint64
-		memLimit        uint64
-		memUsage        uint64
-		workingSetBytes uint64
-		rssBytes        uint64
-		pageFaults      uint64
-		majorPageFaults uint64
-	)
+func metricsToCtrStats(ctx context.Context, c *Container, m *cgroups.Metrics) *cgmgr.CgroupStats {
+	// TODO FIXME
+	return nil
 
-	systemNano := time.Now().UnixNano()
+	//var (
+	//	cpuNano         uint64
+	//	memLimit        uint64
+	//	memUsage        uint64
+	//	workingSetBytes uint64
+	//	rssBytes        uint64
+	//	pageFaults      uint64
+	//	majorPageFaults uint64
+	//)
 
-	if m != nil {
-		cpuNano = m.CPU.Usage.Total
-		memUsage = m.Memory.Usage.Usage
-		memLimit = cgmgr.MemLimitGivenSystem(m.Memory.Usage.Limit)
-		if memUsage > m.Memory.TotalInactiveFile {
-			workingSetBytes = memUsage - m.Memory.TotalInactiveFile
-		} else {
-			log.Debugf(ctx,
-				"Unable to account working set stats: total_inactive_file (%d) > memory usage (%d)",
-				m.Memory.TotalInactiveFile, memUsage,
-			)
-		}
-		rssBytes = m.Memory.RSS
-		pageFaults = m.Memory.PgFault
-		majorPageFaults = m.Memory.PgMajFault
-	}
+	//systemNano := time.Now().UnixNano()
 
-	return &types.ContainerStats{
-		Attributes: c.CRIAttributes(),
-		Cpu: &types.CpuUsage{
-			Timestamp:            systemNano,
-			UsageCoreNanoSeconds: &types.UInt64Value{Value: cpuNano},
-		},
-		Memory: &types.MemoryUsage{
-			Timestamp:       systemNano,
-			WorkingSetBytes: &types.UInt64Value{Value: workingSetBytes},
-			PageFaults:      &types.UInt64Value{Value: pageFaults},
-			MajorPageFaults: &types.UInt64Value{Value: majorPageFaults},
-			RssBytes:        &types.UInt64Value{Value: rssBytes},
-			AvailableBytes:  &types.UInt64Value{Value: memUsage - memLimit},
-		},
-	}
+	//if m != nil {
+	//	cpuNano = m.CPU.Usage.Total
+	//	memUsage = m.Memory.Usage.Usage
+	//	memLimit = cgmgr.MemLimitGivenSystem(m.Memory.Usage.Limit)
+	//	if memUsage > m.Memory.TotalInactiveFile {
+	//		workingSetBytes = memUsage - m.Memory.TotalInactiveFile
+	//	} else {
+	//		log.Debugf(ctx,
+	//			"Unable to account working set stats: total_inactive_file (%d) > memory usage (%d)",
+	//			m.Memory.TotalInactiveFile, memUsage,
+	//		)
+	//	}
+	//	rssBytes = m.Memory.RSS
+	//	pageFaults = m.Memory.PgFault
+	//	majorPageFaults = m.Memory.PgMajFault
+	//}
+
+	//return &types.ContainerStats{
+	//	Attributes: c.CRIAttributes(),
+	//	Cpu: &types.CpuUsage{
+	//		Timestamp:            systemNano,
+	//		UsageCoreNanoSeconds: &types.UInt64Value{Value: cpuNano},
+	//	},
+	//	Memory: &types.MemoryUsage{
+	//		Timestamp:       systemNano,
+	//		WorkingSetBytes: &types.UInt64Value{Value: workingSetBytes},
+	//		PageFaults:      &types.UInt64Value{Value: pageFaults},
+	//		MajorPageFaults: &types.UInt64Value{Value: majorPageFaults},
+	//		RssBytes:        &types.UInt64Value{Value: rssBytes},
+	//		AvailableBytes:  &types.UInt64Value{Value: memUsage - memLimit},
+	//	},
+	//}
 }
 
 // SignalContainer sends a signal to a container process.
