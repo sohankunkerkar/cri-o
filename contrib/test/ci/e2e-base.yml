@@ -1,4 +1,12 @@
 ---
+- name: clone build and install runc
+  include: "build/runc.yml"
+  when: "build_runc | bool"
+
+- name: clone build and install crun
+  include: "build/crun.yml"
+  when: "build_crun | default(False) | bool"
+
 - name: build and install cri-o
   include: "build/cri-o.yml"
 
