@@ -18,7 +18,14 @@
         state: started
         enabled: yes
         daemon_reload: yes
-   
+    
+    - name: use crun if build_crun set
+      replace:
+        path: "/home/skunkerk/test/helpers.bash"
+        regexp: '^CONTAINER_DEFAULT_RUNTIME=\${CONTAINER_DEFAULT_RUNTIME:-runc}$'
+        replace: 'CONTAINER_DEFAULT_RUNTIME=${CONTAINER_DEFAULT_RUNTIME:-crun}'
+      when: "build_crun | default(False) | bool"
+
     - name: run cri-o integration tests
       include: "integration.yml"
 
