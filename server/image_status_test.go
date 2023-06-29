@@ -63,8 +63,10 @@ var _ = t.Describe("ImageStatus", func() {
 						User: "10",
 						Size: &size,
 						OCIConfig: &specs.Image{
-							Architecture: "arch",
-							OS:           "os",
+							Platform: specs.Platform{
+								Architecture: "arch",
+								OS:           "os",
+							},
 						},
 					},
 					nil,
@@ -83,7 +85,7 @@ var _ = t.Describe("ImageStatus", func() {
 			Expect(response).NotTo(BeNil())
 			Expect(response.Info).To(HaveKey("info"))
 			Expect(response.Info["info"]).To(ContainSubstring(
-				`{"imageSpec":{"architecture":"arch","os":"os","config":{}`,
+				`{"imageSpec":{"platform":{"architecture":"arch","os":"os"},"config":{}`,
 			))
 		})
 
