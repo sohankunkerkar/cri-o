@@ -23,7 +23,7 @@ var (
 				Help:      "Cumulative user cpu time consumed in seconds.",
 				LabelKeys: baseLabelKeys,
 			},
-			valueFunc: func(cpu *cgroups.CpuStats) (uint64, string) {
+			valueFunc: func(cpu *cgroups.CpuStats) uint64 {
 				return cpu.CpuUsage.UsageInUsermode / uint64(time.Second)
 			},
 		}, {
@@ -32,7 +32,7 @@ var (
 				Help:      "Cumulative system cpu time consumed in seconds.",
 				LabelKeys: baseLabelKeys,
 			},
-			valueFunc: func(cpu *cgroups.CpuStats) (uint64, string) {
+			valueFunc: func(cpu *cgroups.CpuStats) uint64 {
 				return cpu.CpuUsage.UsageInKernelmode / uint64(time.Second)
 			},
 		}, {
@@ -41,8 +41,21 @@ var (
 				Help:      "Cumulative cpu time consumed in seconds.",
 				LabelKeys: append(baseLabelKeys, "cpu"), // TODO FIXME: need to loop through, basically need to adopt cadvisor's metricsValues structure
 			},
-			valueFunc: func(cpu *cgroups.CpuStats) (uint64, string) {
-				return cpu.CpuUsage.TotalUsage / uint64(time.Second)
+			valueFunc: func(cpu *cgroups.CpuStats) uint64 {
+				var totalUsage uint64
+
+				// Check if per-core CPU usage is available and calculate the sum of all per-core usages
+				for _, usage := range cpu.CpuUsage.PercpuUsage {
+					totalUsage += usage
+				}
+
+				// If per-core usage is not available, use the total usage directly
+				if totalUsage == 0 {
+					totalUsage = cpu.CpuUsage.TotalUsage
+				}
+
+				// Convert the total usage from nanoseconds to seconds
+				return totalUsage / uint64(time.Second)
 			},
 		}, {
 			desc: &types.MetricDescriptor{
@@ -50,7 +63,7 @@ var (
 				Help:      "Number of elapsed enforcement period intervals.",
 				LabelKeys: baseLabelKeys,
 			},
-			valueFunc: func(cpu *cgroups.CpuStats) (uint64, string) {
+			valueFunc: func(cpu *cgroups.CpuStats) uint64 {
 				return cpu.ThrottlingData.Periods
 			},
 		}, {
@@ -59,7 +72,7 @@ var (
 				Help:      "Number of throttled period intervals.",
 				LabelKeys: baseLabelKeys,
 			},
-			valueFunc: func(cpu *cgroups.CpuStats) (uint64, string) {
+			valueFunc: func(cpu *cgroups.CpuStats) uint64 {
 				return cpu.ThrottlingData.ThrottledPeriods
 			},
 		}, {
@@ -68,7 +81,7 @@ var (
 				Help:      "Total time duration the container has been throttled.",
 				LabelKeys: baseLabelKeys,
 			},
-			valueFunc: func(cpu *cgroups.CpuStats) (uint64, string) {
+			valueFunc: func(cpu *cgroups.CpuStats) uint64 {
 				return cpu.ThrottlingData.ThrottledTime / uint64(time.Second)
 			},
 		},
@@ -76,9 +89,9 @@ var (
 )
 
 func generateSandboxCpuMetrics(sb *sandbox.Sandbox, cpu *cgroups.CpuStats, timestamp int64) []*types.Metric {
-	values := append(sandboxBaseLabelValues(sb), attr.Name)
+	values := append(sandboxBaseLabelValues(sb), cpuKey)
 	metrics := make([]*types.Metric, 0, len(cpuMetrics))
-	for _, m := range networkMetrics {
+	for _, m := range cpuMetrics {
 		metrics = append(metrics, &types.Metric{
 			Name:        m.desc.Name,
 			Timestamp:   timestamp,
