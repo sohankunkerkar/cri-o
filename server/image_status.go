@@ -145,3 +145,36 @@ func createImageInfo(result *pkgstorage.ImageResult) (map[string]string, error) 
 	}
 	return map[string]string{"info": string(bytes)}, nil
 }
+
+// getImageInfo returns the image info for the given image.
+func (s *Server) getImageInfo(userRequestedImage string) (imageResult *pkgstorage.ImageResult, err error) {
+	var imgResult *pkgstorage.ImageResult
+	if id := s.StorageImageServer().HeuristicallyTryResolvingStringAsIDPrefix(userRequestedImage); id != nil {
+		imgResult, err = s.StorageImageServer().ImageStatusByID(s.config.SystemContext, *id)
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		potentialMatches, err := s.StorageImageServer().CandidatesForPotentiallyShortImageName(s.config.SystemContext, userRequestedImage)
+		if err != nil {
+			return nil, err
+		}
+		var imgResultErr error
+		for _, name := range potentialMatches {
+			imgResult, imgResultErr = s.StorageImageServer().ImageStatusByName(s.config.SystemContext, name)
+			if imgResultErr == nil {
+				break
+			}
+		}
+		if imgResultErr != nil {
+			return nil, imgResultErr
+		}
+	}
+	// At this point we know userRequestedImage is not empty; "" is accepted by neither HeuristicallyTryResolvingStringAsIDPrefix
+	// nor CandidatesForPotentiallyShortImageName. Just to be sure:
+	if userRequestedImage == "" {
+		return nil, errors.New("internal error: successfully found an image, but userRequestedImage is empty")
+	}
+
+	return imgResult, nil
+}

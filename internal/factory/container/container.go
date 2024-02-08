@@ -129,6 +129,9 @@ type Container interface {
 	// WillRunSystemd checks whether the process args
 	// are configured to be run as a systemd instance.
 	WillRunSystemd() bool
+
+	// IsInCRIMounts checks if a mount path is in the list of mounts
+	IsInCRIMounts(string) bool
 }
 
 // container is the hidden default type behind the Container interface
@@ -758,4 +761,14 @@ func getOCICapabilitiesList() []string {
 		caps = append(caps, "CAP_"+strings.ToUpper(cap.String()))
 	}
 	return caps
+}
+
+// IsInCRIMounts checks if a mount path is in the list of mounts
+func (c *container) IsInCRIMounts(dst string) bool {
+	for _, m := range c.config.Mounts {
+		if m.ContainerPath == dst {
+			return true
+		}
+	}
+	return false
 }
