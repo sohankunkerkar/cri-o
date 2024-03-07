@@ -178,7 +178,7 @@ func (r *runtimeOCI) CreateContainer(ctx context.Context, c *Container, cgroupPa
 	}
 	cmd.ExtraFiles = append(cmd.ExtraFiles, childPipe, childStartPipe)
 	// 0, 1 and 2 are stdin, stdout and stderr
-	cmd.Env = r.handler.MonitorEnv
+	cmd.Env = append(r.handler.RuntimeEnv, r.handler.MonitorEnv...)
 	cmd.Env = append(cmd.Env,
 		fmt.Sprintf("_OCI_SYNCPIPE=%d", 3),
 		fmt.Sprintf("_OCI_STARTPIPE=%d", 4))
@@ -579,10 +579,9 @@ func (r *runtimeOCI) ExecSyncContainer(ctx context.Context, c *Container, comman
 	var stdoutBuf, stderrBuf bytes.Buffer
 	cmd.Stdout = &stdoutBuf
 	cmd.Stderr = &stderrBuf
-
 	cmd.ExtraFiles = append(cmd.ExtraFiles, childPipe, childStartPipe)
 	// 0, 1 and 2 are stdin, stdout and stderr
-	cmd.Env = r.handler.MonitorEnv
+	cmd.Env = append(r.handler.RuntimeEnv, r.handler.MonitorEnv...)
 	cmd.Env = append(cmd.Env,
 		fmt.Sprintf("_OCI_SYNCPIPE=%d", 3),
 		fmt.Sprintf("_OCI_STARTPIPE=%d", 4))

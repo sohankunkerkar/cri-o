@@ -191,10 +191,11 @@ func (c *RootConfig) GetStore() (storage.Store, error) {
 // RuntimeHandler represents each item of the "crio.runtime.runtimes" TOML
 // config table.
 type RuntimeHandler struct {
-	RuntimeConfigPath string `toml:"runtime_config_path"`
-	RuntimePath       string `toml:"runtime_path"`
-	RuntimeType       string `toml:"runtime_type"`
-	RuntimeRoot       string `toml:"runtime_root"`
+	RuntimeConfigPath string   `toml:"runtime_config_path"`
+	RuntimePath       string   `toml:"runtime_path"`
+	RuntimeEnv        []string `toml:"runtime_env"`
+	RuntimeType       string   `toml:"runtime_type"`
+	RuntimeRoot       string   `toml:"runtime_root"`
 
 	// PrivilegedWithoutHostDevices can be used to restrict passing host devices
 	// to a container running as privileged.
@@ -1228,6 +1229,7 @@ func defaultRuntimeHandler() *RuntimeHandler {
 	return &RuntimeHandler{
 		RuntimeType: DefaultRuntimeType,
 		RuntimeRoot: DefaultRuntimeRoot,
+		RuntimeEnv:  []string{},
 		AllowedAnnotations: []string{
 			annotations.OCISeccompBPFHookAnnotation,
 			annotations.DevicesAnnotation,

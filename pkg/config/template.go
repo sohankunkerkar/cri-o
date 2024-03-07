@@ -1298,6 +1298,8 @@ const templateStringCrioRuntimeRuntimesRuntimeHandler = `# The "crio.runtime.run
 {{ $.Comment }}[crio.runtime.runtimes.{{ $runtime_name }}]
 {{ $.Comment }}runtime_path = "{{ $runtime_handler.RuntimePath }}"
 {{ $.Comment }}runtime_type = "{{ $runtime_handler.RuntimeType }}"
+{{ $.Comment }}{{ if $runtime_handler.RuntimeEnv }}runtime_env = [
+{{ range $opt := $runtime_handler.RuntimeEnv }}{{ $.Comment }}{{ printf "\t%q,\n" $opt }}{{ end }}{{ $.Comment }}]{{ end }}
 {{ $.Comment }}runtime_root = "{{ $runtime_handler.RuntimeRoot }}"
 {{ $.Comment }}runtime_config_path = "{{ $runtime_handler.RuntimeConfigPath }}"
 {{ $.Comment }}monitor_path = "{{ $runtime_handler.MonitorPath }}"
