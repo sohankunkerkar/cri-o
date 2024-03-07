@@ -83,6 +83,9 @@ const (
 
 	// DisableFIPSAnnotation is used to disable FIPS mode for a pod within a FIPS-enabled Kubernetes cluster.
 	DisableFIPSAnnotation = "io.kubernetes.cri-o.DisableFIPS"
+
+	// WASMWorkloadAnnotation is the annotation used to specify that a container is a WASM workload
+	WASMWorkloadAnnotation = "io.kubernetes.cri-o.WASMWorkload"
 )
 
 var AllAllowedAnnotations = []string{
@@ -120,4 +123,5 @@ var AllAllowedAnnotations = []string{
 	"module.wasm.image/variant",
 	"io.kubernetes.cri.container-type",
 	"run.oci.",
+	WASMWorkloadAnnotation,
 }

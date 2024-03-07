@@ -36,6 +36,7 @@ type WorkloadConfig struct {
 	// "io.kubernetes.cri-o.UnifiedCgroup.$CTR_NAME" for configuring the cgroup v2 unified block for a container.
 	// "io.containers.trace-syscall" for tracing syscalls via the OCI seccomp BPF hook.
 	// "seccomp-profile.kubernetes.cri-o.io" for setting the seccomp profile for a specific container, pod or whole image.
+	// "io.kubernetes.cri-o.WASMWorkload" for configuring a WASM workload for the pod.
 	AllowedAnnotations []string `toml:"allowed_annotations,omitempty"`
 	// DisallowedAnnotations is the slice of experimental annotations that are not allowed for this workload.
 	DisallowedAnnotations []string

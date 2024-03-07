@@ -1,8 +1,11 @@
 package server
 
 import (
+	"archive/tar"
+	"bytes"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -37,6 +40,7 @@ import (
 	oci "github.com/cri-o/cri-o/internal/oci"
 	"github.com/cri-o/cri-o/internal/runtimehandlerhooks"
 	"github.com/cri-o/cri-o/internal/storage"
+	"github.com/cri-o/cri-o/internal/wasm/wasmartifact"
 	crioann "github.com/cri-o/cri-o/pkg/annotations"
 )
 
@@ -925,6 +929,25 @@ func (s *Server) createSandboxContainer(ctx context.Context, ctr ctrfactory.Cont
 		}
 	}
 
+	if v, ok := sb.Annotations()[crioann.WASMWorkloadAnnotation]; ok {
+		data, err := wasmartifact.New().TryPull(ctx, s.config.SystemContext, containerName, v)
+		if err != nil {
+			return nil, fmt.Errorf("failed to pull wasm artifact: %w", err)
+		}
+		// Specify the file path in /var/lib/crio/artifact where you want to save the data
+		directoryPath := "/var/lib/crio/artifact/wasm_data"
+		log.Debugf(ctx, "Checking if directory %s exists", directoryPath)
+		// Create the directory if it doesn't exist
+		if err := os.MkdirAll(directoryPath, 0755); err != nil {
+			return nil, fmt.Errorf("failed to create directory: %w", err)
+		}
+		log.Debugf(ctx, "Extracting wasm file")
+		// Extract the tar archive
+		if err := extractWasmFile(data, directoryPath); err != nil {
+			return nil, fmt.Errorf("failed to extract wasm file: %w", err)
+		}
+	}
+
 	saveOptions := generate.ExportOptions{}
 	if err := specgen.SaveToFile(filepath.Join(containerInfo.Dir, "config.json"), saveOptions); err != nil {
 		return nil, err
@@ -963,6 +986,49 @@ func disableFipsForContainer(ctr ctrfactory.Container, containerDir string) erro
 		Type:        "bind",
 		Options:     []string{"noexec", "nosuid", "nodev", "ro", "bind"},
 	})
+
+	return nil
+}
+
+func extractWasmFile(tarData []byte, targetDir string) error {
+	reader := tar.NewReader(bytes.NewReader(tarData))
+
+	for {
+		header, err := reader.Next()
+
+		if err == io.EOF {
+			break
+		}
+
+		if err != nil {
+			return fmt.Errorf("failed to read tar header: %w", err)
+		}
+
+		// Extract the filename from the path
+		fileName := filepath.Base(header.Name)
+
+		// Skip directories
+		if fileName == "" || strings.HasSuffix(fileName, "/") {
+			continue
+		}
+
+		// Target path to write the file
+		targetPath := filepath.Join(targetDir, fileName)
+
+		// Open the file for writing
+		file, err := os.Create(targetPath)
+		if err != nil {
+			return fmt.Errorf("failed to create file: %w", err)
+		}
+
+		// Copy the file contents from the tar archive
+		if _, err := io.Copy(file, reader); err != nil {
+			file.Close()
+			return fmt.Errorf("failed to copy file contents: %w", err)
+		}
+
+		file.Close()
+	}
 
 	return nil
 }
