@@ -11,6 +11,7 @@ import (
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/sirupsen/logrus"
+	"github.com/urfave/cli/v2"
 	"tags.cncf.io/container-device-interface/pkg/cdi"
 
 	"github.com/cri-o/cri-o/internal/log"
@@ -18,13 +19,21 @@ import (
 
 // Reload reloads the configuration for the single crio.conf and the drop-in
 // configuration directory.
-func (c *Config) Reload() error {
+func (c *Config) Reload(cliCtx *cli.Context) error {
 	logrus.Infof("Reloading configuration")
 
 	// Reload the config
 	newConfig, err := DefaultConfig()
 	if err != nil {
 		return fmt.Errorf("unable to create default config: %w", err)
+	}
+
+	newConfig.CLIArgs = c.CLIArgs
+	for flagName, value := range c.CLIArgs {
+		cliCtx.Set(flagName, fmt.Sprintf("%v", value))
+	}
+	if err := MergeConfig(newConfig, cliCtx); err != nil {
+		return fmt.Errorf("failed to re-apply CLI arguments: %w", err)
 	}
 
 	if _, err := os.Stat(c.singleConfigPath); !os.IsNotExist(err) {
