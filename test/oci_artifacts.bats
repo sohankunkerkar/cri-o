@@ -371,3 +371,46 @@ EOF
 	crictl rm "$ctr_id"
 	crictl rmi "$IMAGE"
 }
+
+@test "should extract mounted image artifact files correctly with user namespaces" {
+	# This test specifically covers the user namespace + image volume combination
+	# that was failing with runc due to missing ID mappings on overlay mounts.
+	if [ -z "$CONTAINER_UID_MAPPINGS" ]; then
+		skip "userns testing not enabled"
+	fi
+
+	# Skip due to kernel limitation: OverlayFS doesn't fully support idmapped mounts yet
+	# Even though CRI-O correctly passes ID mappings, the kernel's OverlayFS implementation
+	# returns EINVAL for overlay mounts with idmapped mount attributes.
+	# This limitation exists even on recent kernels (tested on 6.15.9).
+	# TODO: Re-enable when kernel OverlayFS idmapped mount support is complete
+	skip "OverlayFS idmapped mounts not fully supported by kernel yet"
+
+	start_crio
+	IMAGE="quay.io/sohankunkerkar/test-artifact:v1"
+	crictl pull "$IMAGE"
+	pod_id=$(crictl runp "$TESTDATA"/sandbox_config.json)
+	jq --arg IMAGE "$IMAGE" \
+		'.mounts = [{
+			container_path: "/root/artifacts",
+			image: { image: $IMAGE },
+			readonly: true
+		}]' \
+		"$TESTDATA"/container_sleep.json > "$TESTDIR"/container.json
+
+	ctr_id=$(crictl create "$pod_id" "$TESTDIR"/container.json "$TESTDATA"/sandbox_config.json)
+
+	run crictl exec --sync "$ctr_id" cat /root/artifacts/zstd.txt
+	[ "$output" == "This is a zstd-compressed file" ]
+
+	# Verify that the container is actually running in a user namespace
+	state=$(crictl inspect "$ctr_id")
+	pid=$(echo "$state" | jq .info.pid)
+	grep 100000 /proc/"$pid"/uid_map
+	grep 200000 /proc/"$pid"/gid_map
+
+	# Cleanup
+	crictl stop "$ctr_id"
+	crictl rm "$ctr_id"
+	crictl rmi "$IMAGE"
+}

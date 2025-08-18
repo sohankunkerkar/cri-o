@@ -809,7 +809,7 @@ func (s *Server) createSandboxContainer(ctx context.Context, ctr container.Conta
 		}
 	}()
 
-	bindMountResult, err := s.addOCIBindMounts(ctx, ctr, &containerInfo, maybeRelabel, skipRelabel, cgroup2RW, idMapSupport, rroSupport)
+	bindMountResult, err := s.addOCIBindMountsPlatform(ctx, ctr, &containerInfo, maybeRelabel, skipRelabel, cgroup2RW, idMapSupport, rroSupport, sb)
 	if err != nil {
 		return nil, err
 	}
@@ -820,6 +820,23 @@ func (s *Server) createSandboxContainer(ctx context.Context, ctr container.Conta
 	cleanups := bindMountResult.Cleanups
 	artifactExtractDirs := bindMountResult.ArtifactExtractDirs
 	cleanupSafeMounts = safeMounts
+
+	// Early cleanup for artifact directories if container creation fails
+	artifactCleanupFunc := func() {
+		for _, extractDir := range artifactExtractDirs {
+			if err := os.RemoveAll(extractDir); err != nil {
+				log.Warnf(ctx, "Failed to clean up artifact extract directory %s: %v", extractDir, err)
+			} else {
+				log.Debugf(ctx, "Successfully cleaned up artifact extract directory %s", extractDir)
+			}
+		}
+	}
+
+	defer func() {
+		if retErr != nil {
+			artifactCleanupFunc()
+		}
+	}()
 
 	s.resourceStore.SetStageForResource(ctx, ctr.Name(), "container device creation")
 
@@ -1233,6 +1250,9 @@ func (s *Server) createSandboxContainer(ctx context.Context, ctr container.Conta
 	for _, extractDir := range artifactExtractDirs {
 		ociContainer.AddArtifactExtractDir(extractDir)
 	}
+
+	// Clear artifact directories from early cleanup since they're now managed by the container
+	artifactExtractDirs = nil
 
 	specgen.SetLinuxMountLabel(mountLabel)
 	specgen.SetProcessSelinuxLabel(processLabel)

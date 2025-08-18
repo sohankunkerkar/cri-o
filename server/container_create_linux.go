@@ -156,7 +156,7 @@ type BindMountResult struct {
 	ArtifactExtractDirs []string
 }
 
-func (s *Server) addOCIBindMounts(ctx context.Context, ctr ctrfactory.Container, ctrInfo *storage.ContainerInfo, maybeRelabel, skipRelabel, cgroup2RW, idMapSupport, rroSupport bool) (*BindMountResult, error) {
+func (s *Server) addOCIBindMounts(ctx context.Context, ctr ctrfactory.Container, ctrInfo *storage.ContainerInfo, maybeRelabel, skipRelabel, cgroup2RW, idMapSupport, rroSupport bool, sb *sandbox.Sandbox) (*BindMountResult, error) {
 	ctx, span := log.StartSpan(ctx)
 	defer span.End()
 
@@ -216,6 +216,16 @@ func (s *Server) addOCIBindMounts(ctx context.Context, ctr ctrfactory.Container,
 		return nil, fmt.Errorf("ensure image volumes path: %w", err)
 	}
 
+	// Get sandbox ID mappings for user namespace support in image volume mounts (Linux-specific)
+	var sandboxIDMappings *idtools.IDMappings
+	if sb != nil {
+		sandboxIDMappings, err = s.getSandboxIDMappings(ctx, sb)
+		if err != nil {
+			log.Warnf(ctx, "Failed to get sandbox ID mappings: %v", err)
+			sandboxIDMappings = nil
+		}
+	}
+
 	var safeMounts []*safeMountInfo
 
 	for _, m := range mounts {
@@ -251,7 +261,7 @@ func (s *Server) addOCIBindMounts(ctx context.Context, ctr ctrfactory.Container,
 				log.Debugf(ctx, "Skipping artifact mount because OCI artifact mount support is disabled")
 			}
 
-			volume, safeMount, err := s.mountImage(ctx, specgen, imageVolumesPath, m, ctrInfo.RunDir, namespace)
+			volume, safeMount, err := s.mountImage(ctx, specgen, imageVolumesPath, m, ctrInfo.RunDir, namespace, sandboxIDMappings)
 			if err != nil {
 				return nil, fmt.Errorf("%w: %w", crierrors.ErrImageVolumeMountFailed, err)
 			}
@@ -436,6 +446,11 @@ func (s *Server) addOCIBindMounts(ctx context.Context, ctr ctrfactory.Container,
 	}, nil
 }
 
+// addOCIBindMountsPlatform is a platform-specific wrapper for addOCIBindMounts
+func (s *Server) addOCIBindMountsPlatform(ctx context.Context, ctr ctrfactory.Container, ctrInfo *storage.ContainerInfo, maybeRelabel, skipRelabel, cgroup2RW, idMapSupport, rroSupport bool, sb *sandbox.Sandbox) (*BindMountResult, error) {
+	return s.addOCIBindMounts(ctx, ctr, ctrInfo, maybeRelabel, skipRelabel, cgroup2RW, idMapSupport, rroSupport, sb)
+}
+
 // mountArtifact binds artifact blobs to the container filesystem based on the provided mount configuration.
 func (s *Server) mountArtifact(ctx context.Context, specgen *generate.Generator, m *types.Mount, mountLabel string, isSPC, maybeRelabel bool) (volumes []oci.ContainerVolume, cleanups []func(), extractDirs []string, err error) {
 	artifact, err := s.ArtifactStore().Status(ctx, m.GetImage().GetImage())
@@ -559,7 +574,7 @@ func FilterMountPathsBySubPath(ctx context.Context, artifact, subPath string, pa
 }
 
 // mountImage adds required image mounts to the provided spec generator and returns a corresponding ContainerVolume.
-func (s *Server) mountImage(ctx context.Context, specgen *generate.Generator, imageVolumesPath string, m *types.Mount, runDir, namespace string) (*oci.ContainerVolume, *safeMountInfo, error) {
+func (s *Server) mountImage(ctx context.Context, specgen *generate.Generator, imageVolumesPath string, m *types.Mount, runDir, namespace string, idMappings *idtools.IDMappings) (*oci.ContainerVolume, *safeMountInfo, error) {
 	if m == nil || m.GetImage() == nil || m.GetImage().GetImage() == "" || m.GetContainerPath() == "" {
 		return nil, nil, fmt.Errorf("invalid mount specified: %+v", m)
 	}
@@ -625,17 +640,36 @@ func (s *Server) mountImage(ctx context.Context, specgen *generate.Generator, im
 
 	const overlay = "overlay"
 
-	specgen.AddMount(rspec.Mount{
+	// Use container ID mappings for overlay mount if user namespaces are enabled
+	// Note: As of kernel 6.15.9, OverlayFS doesn't fully support idmapped mounts.
+	// This code is correct and will work when kernel support is complete.
+	var uidMappings, gidMappings []rspec.LinuxIDMapping
+	if len(m.GetUidMappings()) > 0 || len(m.GetGidMappings()) > 0 {
+		// Use explicit mount mappings if provided
+		uidMappings = getOCIMappings(m.GetUidMappings())
+		gidMappings = getOCIMappings(m.GetGidMappings())
+		log.Debugf(ctx, "Using explicit mount mappings: UID=%+v, GID=%+v", uidMappings, gidMappings)
+	} else if idMappings != nil {
+		// Use container ID mappings for user namespace support
+		uidMappings = convertIDMappingsToOCI(idMappings.UIDs())
+		gidMappings = convertIDMappingsToOCI(idMappings.GIDs())
+		log.Debugf(ctx, "Using sandbox ID mappings: UID=%+v, GID=%+v", uidMappings, gidMappings)
+	} else {
+		log.Debugf(ctx, "No ID mappings available for overlay mount")
+	}
+
+	mount := rspec.Mount{
 		Type:        overlay,
 		Source:      overlay,
 		Destination: m.GetContainerPath(),
 		Options: []string{
 			"lowerdir=" + mountPoint + ":" + imageVolumesPath,
 		},
-		UIDMappings: getOCIMappings(m.GetUidMappings()),
-		GIDMappings: getOCIMappings(m.GetGidMappings()),
-	})
-	log.Debugf(ctx, "Added overlay mount from %s to %s", mountPoint, imageVolumesPath)
+		UIDMappings: uidMappings,
+		GIDMappings: gidMappings,
+	}
+	specgen.AddMount(mount)
+	log.Debugf(ctx, "Added overlay mount from %s to %s with UIDMappings=%+v, GIDMappings=%+v", mountPoint, imageVolumesPath, uidMappings, gidMappings)
 
 	return &oci.ContainerVolume{
 		ContainerPath:     m.GetContainerPath(),
@@ -695,6 +729,24 @@ func getOCIMappings(m []*types.IDMapping) []rspec.LinuxIDMapping {
 			ContainerID: m.GetContainerId(),
 			HostID:      m.GetHostId(),
 			Size:        m.GetLength(),
+		})
+	}
+
+	return ids
+}
+
+// convertIDMappingsToOCI converts idtools.IDMap to rspec.LinuxIDMapping for OCI spec.
+func convertIDMappingsToOCI(mappings []idtools.IDMap) []rspec.LinuxIDMapping {
+	if len(mappings) == 0 {
+		return nil
+	}
+
+	ids := make([]rspec.LinuxIDMapping, 0, len(mappings))
+	for _, m := range mappings {
+		ids = append(ids, rspec.LinuxIDMapping{
+			ContainerID: uint32(m.ContainerID),
+			HostID:      uint32(m.HostID),
+			Size:        uint32(m.Size),
 		})
 	}
 

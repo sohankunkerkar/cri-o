@@ -55,7 +55,7 @@ func addSysfsMounts(ctr ctrfactory.Container, containerConfig *types.ContainerCo
 func setOCIBindMountsPrivileged(g *generate.Generator) {
 }
 
-func (s *Server) addOCIBindMounts(ctx context.Context, ctr ctrfactory.Container, ctrInfo *storage.ContainerInfo, maybeRelabel, skipRelabel, cgroup2RW, idMapSupport, rroSupport bool) (*BindMountResult, error) {
+func (s *Server) addOCIBindMounts(ctx context.Context, ctr ctrfactory.Container, ctrInfo *storage.ContainerInfo, maybeRelabel, skipRelabel, cgroup2RW, idMapSupport, rroSupport bool, sb *sandbox.Sandbox) (*BindMountResult, error) {
 	ctx, span := log.StartSpan(ctx)
 	defer span.End()
 
@@ -165,6 +165,11 @@ func (s *Server) addOCIBindMounts(ctx context.Context, ctr ctrfactory.Container,
 		Cleanups:            nil,
 		ArtifactExtractDirs: nil,
 	}, nil
+}
+
+// addOCIBindMountsPlatform is a platform-specific wrapper for addOCIBindMounts
+func (s *Server) addOCIBindMountsPlatform(ctx context.Context, ctr ctrfactory.Container, ctrInfo *storage.ContainerInfo, maybeRelabel, skipRelabel, cgroup2RW, idMapSupport, rroSupport bool, sb *sandbox.Sandbox) (*BindMountResult, error) {
+	return s.addOCIBindMounts(ctx, ctr, ctrInfo, maybeRelabel, skipRelabel, cgroup2RW, idMapSupport, rroSupport, sb)
 }
 
 func addShmMount(ctr ctrfactory.Container, sb *sandbox.Sandbox) {
